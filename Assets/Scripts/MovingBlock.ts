@@ -45,14 +45,14 @@ export default class MovingBlock extends ZepetoScriptBehaviour {
     private FixedUpdate() {
         this.clientElapsedTime += Time.fixedDeltaTime;
 
-        // 룸에서 흐른 시간에 따라 블록 이동 방향 설정
+        // Move the block relative to the current elapsed time. 
         this.MoveBlock(this.clientElapsedTime);
 
         this.MoveLocalCharacterWithBlock();
         if (false == this.isBlockRotating)
             return;
 
-        // 블록 및 캐릭터 회전
+        // Block/Character rotations.
         this.RotateBlock();
         this.RotateCharacterWithBlock();
     }
@@ -72,18 +72,18 @@ export default class MovingBlock extends ZepetoScriptBehaviour {
     }
 
     /* MoveBlock() 
-       - 현재 블록의 방향 및 속도를 지정합니다.
+       - Controls the block direction/speed. 
     */
     private MoveBlock(elapsedTime: number) {
 
         let predictedDir: number = (Mathf.Floor(elapsedTime / this.timeToMove)) % 2 == 0 ? 1 : -1;
 
-        // 방향은 예측 방향으로 계속 설정
+        // Continuously apply the direction to the predicted direction
         this.moveDirection = predictedDir;
 
-        // 이전 방향과 다른 경우에만 velocity 재설정
+        // Reapply velocity only ff the current direction is different than the previous direction
         if (this.moveDirection != this.prevDirection) {
-            // 블록 이동 속도 재설정
+            // Reapply block speed.
             this.rigidbody.velocity = this.moveSpeed * this.moveDirection;
         }
 
@@ -91,7 +91,7 @@ export default class MovingBlock extends ZepetoScriptBehaviour {
     }
 
     /* MoveCharacterWithBlock() 
-       - 로컬 캐릭터와 블록을 같이 이동시킵니다.
+       - Move the local character with the block. 
     */
     private MoveLocalCharacterWithBlock() {
         if (false == this.isLocalPlayerOnBlock)
@@ -103,18 +103,18 @@ export default class MovingBlock extends ZepetoScriptBehaviour {
     }
 
     /* RotateBlock() 
-        - 블록 회전 옵션이 켜져있는 경우 블록을 회전시킵니다.
+        - Rotate block if the rotation option is enabled. 
     */
     private RotateBlock() {
         let deltaRotation: Quaternion = Quaternion.Euler(this.eulerAngleVelocity * Time.fixedDeltaTime);
         this.rigidbody.MoveRotation(this.rigidbody.rotation * deltaRotation);
     }
 
-    /* MoveCharacterWithBlock() 
-       - 블록 회전 옵션이 켜져있는 경우 캐릭터를 같이 회전시킵니다.
+    /* RotateCharacterWithBlock() 
+       - If the block rotation is enabled, rotate the character along with the block. 
     */
     private RotateCharacterWithBlock() {
-        // 로컬 캐릭터 회전
+        // Local character rotation
         if (this.isLocalPlayerOnBlock) {
             this.localCharacter.transform.RotateAround(this.transform.position, Vector3.down, this.characterRotateAroundSpeed);
         }

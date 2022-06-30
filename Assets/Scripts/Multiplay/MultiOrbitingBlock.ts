@@ -5,7 +5,7 @@ import BlockMultiplay from './BlockMultiplay';
 
 export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
 
-    // 블록 회전 관련 변수
+    // Block orbit variables
     @Header("Orbit Block")
     public rotSpeed: number = 0;
     public rotatingPoint: Transform;
@@ -16,7 +16,7 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
     private localCharacter: ZepetoCharacter;
     private localCharacterController: CharacterController;
 
-    // 멀티 동기화에 필요한 변수
+    // Multiplayer Sync Variables
     private isMultiplayMode: boolean = false;
     private syncCharacterTransforms: Map<string, Transform> = new Map<string, Transform>();
     private myIdx: number = 0;
@@ -55,10 +55,10 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
 
     private Update() {
 
-        // 블록 공전
+        // Block orbit
         this.transform.RotateAround(this.rotatingPoint.position, this.rotateAroundAxis, this.rotSpeed * Time.deltaTime);
 
-        // 블록 위에 있는 캐릭터들도 같이 이동
+        // Move the characters along with the orbiting block
         this.MoveCharacterWithBlock();
     }
 
@@ -86,7 +86,7 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
             return;
         }
 
-        // 착지 위치에 대한 메시지를 한 번만 보내기 위한 조건문
+        // A conditional statement to send a message about the landing location only once.
         if (this.isLocalCharacterLanded) {
             this.isLocalCharacterLanded = false;
             if (this.isMultiplayMode) {
@@ -110,7 +110,7 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
         if (false == this.isMultiplayMode || true == this.stopToDetectTriggerExit) {
             return;
         }
-        // 로컬 플레이어 캐릭터이면 서버로 메시지 전송 (player.isOnBlock = false)
+        // Send message to server if local player character (player.isOnBlock = false)
         this.blockMultiplayManager?.SendOnBlockTriggerExit(this.myIdx, this.relativePosAtJump);
 
     }
@@ -120,16 +120,16 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
     }
 
     /* MoveCharacterWithBlock() 
-       - 캐릭터와 블록을 같이 이동시킵니다.
+       - Move the character along with the block
     */
     private MoveCharacterWithBlock() {
 
-        // 블록이 이동하는 방향으로의 벡터 
+        // Block movement direction vector 
         let curBlockPosition = this.transform.position;
         let forwardVector = (curBlockPosition - this.prevBlockPosition).normalized;
         this.prevBlockPosition = this.transform.position;
 
-        // 로컬 캐릭터 이동
+        // Move the local character
         if (this.isLocalPlayerOnBlock) {
             this.localCharacterController.Move(forwardVector * (this.rotSpeed / this.characterSpeedControlValue) * Time.deltaTime);
         }
@@ -137,7 +137,7 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
         if (this.syncCharacterTransforms.size == 0)
             return;
 
-        // 멀티 캐릭터 이동
+        // Move the multiplay character
         this.syncCharacterTransforms.forEach((characterTr: Transform, name: string) => {
 
             if (null != characterTr) {
@@ -151,28 +151,28 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
 
     // ---------------------------------- Multiplay -----------------------------------
     /* SetBlockIdx()
-       - 멀티플레이 시 블록 위 캐릭터 위치 동기화를 위해 현재 블록의 인덱스를 설정합니다.
+       - Sets the index of the current block to synchronize the position of the character on the block in multiplayer.
     */
     public SetBlockIdx(idx: number) {
         this.myIdx = idx;
     }
 
     /* SetMultiRoomElapsedTime()
-       - 멀티플레이 동기화 시 블록 위치 동기화를 위해 현재 룸에서 흐른 시간을 설정합니다.
+       - Sets the time elapsed in the current room for block position synchronization during multiplayer synchronization.
     */
     public InitMultiplayMode(elapsedTime: number) {
-        // 멀티플레이 모드 활성화
+        // Enable multiplayer mode
         this.isMultiplayMode = true;
         if (null == this.blockMultiplayManager) {
             this.blockMultiplayManager = BlockMultiplay.GetInstance();
         }
-        // 처음 한 번만 반영
+        // Execute only the first time.
         this.CalculatePredictedTransform(elapsedTime);
     }
 
     private stopToDetectTriggerExit: boolean = false;
     /* CalculatePredictedPosition()
-       - 현재 룸에서 흐른 시간을 바탕으로 블록의 예측 위치를 계산합니다.
+       - Calculates the predicted position of the block based on the time elapsed in the current room.
     */
     public CalculatePredictedTransform(elapsedTime: number) {
 
@@ -189,22 +189,22 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
         let myRot: Quaternion = this.startRotation;
         let predictedRot = myRot * Quaternion.Inverse(myRot) * rot * myRot;
 
-        // 블록의 위치와 이동 방향을 예측된 값으로 조정
+        // Adjust the position and movement direction of the block to the predicted values
         this.transform.position = predictedPos;
         this.transform.rotation = predictedRot;
 
-        // 로컬 캐릭터 위치 재조정
+        // Local character repositioning
         if (this.isLocalPlayerOnBlock) {
             this.StartCoroutine(this.TeleportCharacter(predictedPos));
         }
 
-        // 동기화 캐릭터들은 서버에서 조정해줄 거라서         
+        // Synchronization characters will be coordinated by the server.
         this.syncCharacterTransforms.forEach((characterTr: Transform, name: string) => {
             if (null != characterTr) {
                 let characterPosition = new Vector3(predictedPos.x, this.renderer.bounds.max.y, predictedPos.z);
                 characterTr.position = characterPosition;
             } else {
-                // 블록 위에 있다가 방을 나간 경우 
+                // If the player leaves the room while on a block.
                 this.syncCharacterTransforms.delete(name);
             }
         });
@@ -212,8 +212,8 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
 
     private *TeleportCharacter(predictedPos: Vector3) {
 
-        this.stopToDetectTriggerExit = true; // 위치 조정 중에 트리거를 벗어난 건 무시
-        this.isLocalPlayerOnBlock = false; // 텔레포트 중에 블록이 해당 캐릭터를 운반하도록 하지 않도록 하기 위해
+        this.stopToDetectTriggerExit = true; // Ignore anything out of trigger during positioning
+        this.isLocalPlayerOnBlock = false; // To ensure that blocks don't carry their characters while teleporting
 
         while (true) {
             yield null;
@@ -230,7 +230,7 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
     }
 
     /* AddCharacterOnBlock()
-      - 해당 블록이 운반할 캐릭터에 등록합니다.
+      - Register the character to be carried by the block.
     */
     public AddCharacterOnBlock(sessionId: string, relativeVector: Vector3, carrierParent: Transform) {
         let position = this.transform.position - relativeVector;
@@ -244,7 +244,7 @@ export default class MultiOrbitingBlock extends ZepetoScriptBehaviour {
     }
 
     /* RemoveCharacterOnBlock()
-       - 해당 블록이 운반할 캐릭터에서 제거합니다.
+       - Remove block from the character its carrying.
     */
     public RemoveCharacterOnBlock(sessionId: string, relativePos: Vector3, carrierParent: Transform) {
         let position = this.transform.position - relativePos;

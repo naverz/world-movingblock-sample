@@ -4,7 +4,7 @@ import { ZepetoCharacter, ZepetoPlayers } from 'ZEPETO.Character.Controller'
 
 export default class OrbitingBlock extends ZepetoScriptBehaviour {
 
-    // 블록 회전 관련 변수
+    // Block Rotation Variables
     @Header("Orbit Block")
     public rotSpeed: number = 0;
     public rotatingPoint: Transform;
@@ -31,10 +31,10 @@ export default class OrbitingBlock extends ZepetoScriptBehaviour {
 
     private Update() {
 
-        // 블록 공전
+        // Block Orbit
         this.transform.RotateAround(this.rotatingPoint.position, this.rotateAroundAxis, this.rotSpeed * Time.deltaTime);
 
-        // 블록 위에 있는 캐릭터들도 같이 이동
+        // Move Character along with the block character is standing on.
         this.MoveCharacterWithBlock();
     }
 
@@ -53,16 +53,16 @@ export default class OrbitingBlock extends ZepetoScriptBehaviour {
     }
 
     /* MoveCharacterWithBlock() 
-       - 캐릭터와 블록을 같이 이동시킵니다.
+       - Move the character along with the block. 
     */
     private MoveCharacterWithBlock() {
 
-        // 블록이 이동하는 방향으로의 벡터 
+        // Create a direction vector in the blocks forward direction. 
         let curBlockPosition = this.transform.position;
         let forwardVector = (curBlockPosition - this.prevBlockPosition).normalized;
         this.prevBlockPosition = this.transform.position;
 
-        // 로컬 캐릭터 이동
+        // Move the local character. 
         if (this.isLocalPlayerOnBlock) {
             this.localCharacterController.Move(forwardVector * (this.rotSpeed / this.characterSpeedControlValue) * Time.deltaTime);
         }

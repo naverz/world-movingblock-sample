@@ -13,13 +13,13 @@ import MultiOrbitingBlock from './MultiOrbitingBlock';
  * Interface
  * 
  * PlayerBlockInfo
- *  캐릭터가 블록에 착지했을 때 상대적 위치 벡터
+ *  Character position relatative to the block its standing on
  * 
  * PlayerPlatformInfo
- *  캐릭터가 플랫폼에 착지했을 때 상대적 위치 벡터와 캐릭터가 점프를 시작한 플랫폼 위의 위치
+ * Whent the stands on a platform, the block relative positioning and the position at the start of a jump.
  * 
  * PlayerTimestamp
- *  게임시작 timestamp와 플레이어 접속시점 timestamp
+ *  Timestamps for game start as well as join time. 
 */
 
 interface PlayerBlockInfo {
@@ -56,26 +56,26 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     private movingBlockScripts: MultiMovingBlock[];
     private orbitingBlockScripts: MultiOrbitingBlock[];
 
-    // 현재 블럭의 인덱스입니다.
+    // Current block index
     private blockIdx: number = 0;
 
-    // 캐릭터 위치 멀티 동기화 시 필요한 변수들
-    public carrierParentPrefab: GameObject; //운반용 부모 프리팹
+    // Varaibles required for character position synchronization during multiplay. 
+    public carrierParentPrefab: GameObject; //Transport parent prefab. 
     private originCharacterParents: Map<string, GameObject> = new Map<string, GameObject>();
     private characterContexts: Map<string, GameObject> = new Map<string, GameObject>();
     private carrierParents: Map<string, GameObject> = new Map<string, GameObject>();
 
-    // 블럭 동기화를 위한 변수 
+    // Variable required for block movement. 
     private gameStartTimestampFromServer: number = 0;
     private diffTimestamp: number = 0;
 
-    // 캐릭터가 맵 내에서 리스폰 될 포인트 입니다.
+    // Character respawn point on map. 
     public respawnPoint: Transform;
 
-    // 플레이어가 백그라운드로 나갔다 돌아온 경우를 판단하는 변수입니다.
+    // If the game has been paused via app background mode. 
     private bPaused: boolean = false;
 
-    // 캐릭터 점프 시 점프 동기화 및 Animation 동기화에 필요한 변수들   
+    // Movement/Animation variables required on character jump event
     public moveBlockAnimator: RuntimeAnimatorController;
     private isLanding: Map<string, boolean> = new Map<string, boolean>();
     private playerTargetPosition: Map<string, Vector3> = new Map<string, Vector3>();
@@ -132,33 +132,33 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
             this.AddMessageHandlersForCharacterSync();
         };
 
-        // 로컬 캐릭터에 블록과의 충돌 체크를 위한 스크립트 추가
+        // Add local character - block collision event. 
         ZepetoPlayers.instance.OnAddedLocalPlayer.AddListener(() => {
             ZepetoPlayers.instance.LocalPlayer.zepetoPlayer.character.gameObject.AddComponent<CharacterEventChecker>();
         });
     }
 
     private OnApplicationPause(pause: boolean) {
-        // 백그라운드 갔다가 돌아온 경우 블록 위치 동기화 재설정
+        // If returning from background pause, update block positioning. 
         if (pause) {
             this.bPaused = true;
         } else {
             if (this.bPaused) {
                 this.bPaused = false;
-                // 현재 timestamp 
+                // current timestamp 
                 let curClientTimestamp = + new Date();
 
-                // 진행된 시간 = 현재 timestamp - (게임 시작 timestamp + diff) // ex. 3월 6일 30초 - (3월 1일 + 5일)
+                // elapsed time = - current timestamp - (game start time + difference) // ex. 3Months 6Days 30Seconds - (3Months 1Day + 5Days)
                 let elapsedTime = curClientTimestamp - (this.gameStartTimestampFromServer + this.diffTimestamp);
 
-                // 블록에 전달하기 위해 초 단위로 변경  
+                // Convert to seconds for block movement. 
                 let timestampSecond = elapsedTime / 1000;
 
-                // 각 블록에 현재 룸에서 흐른 시간을 전달합니다.
+                // Update the passed time to each moving block to their corresponding rooms. 
                 for (let i = 0; i < this.movingBlockScripts.length; i++) {
                     this.movingBlockScripts[i].InitMultiplayMode(timestampSecond);
                 }
-                // 각 블록에 현재 룸에서 흐른 시간을 전달합니다.
+                // Update the passed time to each orbiting block to their corresponding rooms. 
                 for (let i = 0; i < this.orbitingBlockScripts.length; i++) {
                     this.orbitingBlockScripts[i].InitMultiplayMode(timestampSecond);
                 }
@@ -167,11 +167,11 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     /* AddMessageHandlersForBlockSync()
-       - 블록 위치 동기화를 위한 메시지 핸들러입니다.
+       - Message Handlers for block position sync. 
     */
     private AddMessageHandlersForBlockSync() {
 
-        // 처음 서버에 Join 시 게임시작 timestamp와 플레이어 접속시점 timestamp를 전달 받습니다.
+        // When first joining the server 처음 서버에 Join 시 게임시작 timestamp와 플레이어 접속시점 timestamp를 전달 받습니다.
         this.room.AddMessageHandler(this.MESSAGE_TYPE_ServerTimestamp, (message: PlayerTimestamp) => {
 
             let timestampInfo: PlayerTimestamp = {
@@ -179,27 +179,27 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
                 playerJoinTimestamp: message.playerJoinTimestamp
             };
 
-            // 서버에서의 게임시작 시점 timestamp 캐싱
+            // Cache the server's game start time. 
             this.gameStartTimestampFromServer = Number(timestampInfo.gameStartTimestamp);
 
-            // 서버에서의 플레이어의 Join 시점 timestamp
+            // Catche the player join time from the server. 
             let playerJoinTimestampFromServer = Number(timestampInfo.playerJoinTimestamp);
 
-            // 현재 클라이언트 시간
+            // Current client time. 
             let curClientTimeStamp = + new Date();
 
-            // 서버에서의 timestamp와 클라이언트에서의 timestamp의 차이를 저장
-            // - 백그라운드에서 돌아와서 블록 위치 재조정 시 차이값 보정을 위함 
+            // Save the difference between the server timestamp and the client timestamp. 
+            // - For applying the difference after returning from the background. 
             let diff: number = curClientTimeStamp - playerJoinTimestampFromServer;
-            this.diffTimestamp = diff; // 차이값 저장
+            this.diffTimestamp = diff; // save the time difference. 
 
-            // 게임 시작 후 흐른 시간
+            // Elapsed time since game start. 
             let elapsedTime = playerJoinTimestampFromServer - this.gameStartTimestampFromServer;
 
-            // 블록 계산을 위해 초 단위로 변경
+            // Convert to seconds for block movement calculation. 
             let timestampSecond = elapsedTime / 1000;
 
-            // 각 블록에 흐른 시간 전달
+            // Send the elapsed time to each block. 
             for (let i = 0; i < this.movingBlockScripts.length; i++) {
                 this.movingBlockScripts[i].InitMultiplayMode(timestampSecond);
             }
@@ -211,19 +211,19 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     /* AddMessageHandlersForCharacterSync()
-       - 캐릭터 위치 동기화를 위한 메시지 핸들러입니다.
-       MESSAGE_TYPE_OnPlatformState : 캐릭터가 플랫폼에 올라간 경우
-       MESSAGE_TYPE_OnTryJumpForMovingToBlock : 캐릭터가 플랫폼에서 블록으로 이동을 시도한 경우
-       MESSAGE_TYPE_OnCharacterLandedBlock : 캐릭터가 무빙블록에 착지한 경우 (상대적 위치 값 전달 받음)
-       MESSAGE_TYPE_OnCharacterJumpOnBlock : 캐릭터가 블록위에서 점프를 한 경우
-       MESSAGE_TYPE_OnFallTriggerEnter : 캐릭터가 떨어져 FallTrigger에 닿은 경우
-       MESSAGE_TYPE_OnLeavePlayer : 캐릭터가 룸에서 나가는 경우
+       - Message handlers for Character position syncing
+       MESSAGE_TYPE_OnPlatformState : When the character lands on a platform. 
+       MESSAGE_TYPE_OnTryJumpForMovingToBlock : When the character initiates movement from platform to block. 
+       MESSAGE_TYPE_OnCharacterLandedBlock : When the character lands on a moving block
+       MESSAGE_TYPE_OnCharacterJumpOnBlock : When the character jump on a block
+       MESSAGE_TYPE_OnFallTriggerEnter : When the character falls into a falltrigger.
+       MESSAGE_TYPE_OnLeavePlayer : When the character leaves the room. 
     */
     private AddMessageHandlersForCharacterSync() {
 
-        // 캐릭터가 무빙블록에서 내려오고 플랫폼에 올라갔을 때 운반용 부모를 해제하고 원래 부모로 설정합니다.
+        // When the character lands from moving block to platform, assign transport parent to original parent. 
         this.room.AddMessageHandler(this.MESSAGE_TYPE_OnPlatformState, (message: string) => {
-            // 기존 동기화 로직 실행을 위해 context를 원래 부모로 돌려놔줌
+            // Return the context to original parent for running Base synchronization logic
             const sessionId: string = message.toString();
             if (false == this.characterContexts.has(sessionId)) {
                 return;
@@ -232,41 +232,41 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
             this.ResetJumpToBlockSetting(sessionId);
         });
 
-        // 캐릭터가 플랫폼에서 무빙블록에 올라가려고 시도할 때 메시지를 전달 받습니다.
+        // When the character attemps to land on a moving block from a platform. 
         this.room.AddMessageHandler(this.MESSAGE_TYPE_OnTryJumpForMovingToBlock, (message: PlayerPlatformInfo) => {
             const relativeVector = new Vector3(message.posX, message.posY, message.posZ);
             const platformPosition = new Vector3(message.relativeX, message.relativeY, message.relativeZ);
             const sessionId: string = message.sessionId;
             this.SetCarrierParentAndZepetoContext(sessionId);
-            //플랫폼에서 무빙블록에 올라가는 경우 인덱스는 -1을 보내고 해당 경우에만 점프 시 플랫폼에서 점프한 위치를 전달해서 보냅니다.
+            //When the character moves from platform to moving block, send -1 as the index and send the jump position. 
             this.SetJumpToBlockSetting(sessionId, -1, relativeVector, this.FIRSTBLOCK, platformPosition);
         });
 
-        // 캐릭터가 블록에 착지했을 때 상대적 위치 벡터를 메시지로 전달 받습니다.        
+        // When the character lands on the block send the relative position vector as a message. 
         this.room.AddMessageHandler(this.MESSAGE_TYPE_OnCharacterLandedBlock, (message: PlayerBlockInfo) => {
             // 해당 캐릭터를 블록 위로 텔레포트
             this.TeleportCharacterOnBlock(message);
         });
 
-        // 캐릭터가 블록에서 점프했을 때 상대적 위치 벡터를 메시지로 전달 받습니다.
+        // When the character jumps from a block, send the relative position vector as a message. 
         this.room.AddMessageHandler(this.MESSAGE_TYPE_OnCharacterJumpOnBlock, (message: PlayerBlockInfo) => {
             this.OnBlockTriggerExit(message);
         });
 
-        // 캐릭터가 떨어진 경우 메시지를 전달 받습니다.
+        // Send a message for when the characte ralls off the block. 
         this.room.AddMessageHandler(this.MESSAGE_TYPE_OnFallTriggerEnter, (message: string) => {
             const sessionId: string = message.toString();
             this.ResetJumpToBlockSetting(sessionId);
-            // 해당 캐릭터를 리스폰
+            // Character respawn. 
             if (this.carrierParents.has(sessionId)) {
                 this.StartCoroutine(this.RespwanCharacter(sessionId));
             }
         });
 
-        // 캐릭터가 나가는 시점에 메시지를 전달받습니다.
+        // Recieve a message when the player leaves the room. 
         this.room.AddMessageHandler(this.MESSAGE_TYPE_OnLeavePlayer, (message: string) => {
             const sessionId: string = message.toString();
-            // 사용했던 인스턴스들 삭제
+            // Destroy the inspectors used by the player. 
             if (this.carrierParents.has(sessionId)) {
                 this.carrierParents.delete(sessionId);
             }
@@ -280,7 +280,7 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     /*
-        캐릭터가 떨어진 경우 리스폰 포인트로 이동 시킵니다.
+        When the character falls, respawn the character at the respawn point. 
     */
     private *RespwanCharacter(sessionId: string) {
         const carrierParent = this.carrierParents.get(sessionId);
@@ -290,9 +290,9 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
         }
     }
 
-    // ------------------------ 서버로 메시지를 전송하기 위한 함수들 ------------------------
+    // ------------------------ Funcions Necessary for sending messages to the server ------------------------
     /* SendOnTryJumpForMovingToBlock()
-       - 캐릭터가 플랫폼에서 무빙블록에 올라가려고 시도할 때 메시지를 전송합니다.
+       - When the character attemps a move from a platform to a moving block.
     */
     public SendOnTryJumpForMovingToBlock(position: Vector3, platformPosition: Vector3) {
         const data = new RoomData();
@@ -313,14 +313,14 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     /* SendOnBlockTriggerEnter() 
-       - 플레이어가 무빙블록 트리거에 들어간 순간 서버로 메시지를 전송합니다.
+       - When the enters a moving block trigger. 
     */
     public SendOnBlockTriggerEnter(blockIdx: number) {
         this.room.Send(this.MESSAGE_TYPE_OnBlockTriggerEnter, blockIdx);
     }
 
     /* SendOnBlockTriggerExit() 
-       - 플레이어가 무빙블록 트리거에서 나오는 순간의 상대적 위치 벡터를 전송합니다.
+       - When the player exits a moving block trigger. 
     */
     public SendOnBlockTriggerExit(blockIdx: number, relativePosition: Vector3) {
         const data = new RoomData();
@@ -337,7 +337,7 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     /* SendOnLandedBlock() 
-       - 로컬 캐릭터가 블록 위에 착지했을 때 서버로 상대적 위치 벡터를 전송합니다.
+       - Send relative position vectors when the local player lands on a block.
     */
     public SendOnLandedBlock(blockIdx: number, relativeVector: Vector3) {
         const data = new RoomData();
@@ -353,58 +353,58 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     /* SendOnPlatformState() 
-       - 로컬 캐릭터가 플랫폼 위에 착지했을 때 서버로 상대적 위치 벡터를 전송합니다.
+       - When the local character lands on a platform, send the relative position as a vector.
     */
     public SendOnPlatformState() {
         this.room.Send(this.MESSAGE_TYPE_OnPlatformState);
     }
 
     /* SendOnFallTriggerEnter() 
-       - 로컬 캐릭터가 블록 아래로 떨어졌을 때 서버로 메시지를 전송합니다.
+       - When the local character falls, send a message to the server. 
     */
     public SendOnFallTriggerEnter() {
         this.room.Send(this.MESSAGE_TYPE_OnFallTriggerEnter);
     }
 
     /* SendTryJump() 
-       - 로컬 캐릭터가 블록 위에서 점프를 시도했을 때 메시지를 전송합니다.
+       - Whent he local character jumps from a block. 
     */
     public SendTryJump(isJumping: boolean) {
         this.room.Send(this.MESSAGE_TYPE_OnTryJump, isJumping);
     }
 
     /* CheckPlayerOnBlock()
-       - 룸에 먼저 들어와 있던 캐릭터가 블록 위에 있다면 관련 설정들을 진행합니다.
+       - Setup code for if a character in a room is already on a block
     */
     public CheckPlayerOnBlock(sessionId: string) {
 
         let player: Player = this.room.State.players.get_Item(sessionId);
         let serverBlockIndex = player.blockIndex;
         if (player.isOnBlock) {
-            // Moving Block인 경우
+            // In the case of a moving block. 
             if (this.IsMovingBlock(serverBlockIndex)) {
-                // 해당 블록의 운반 대상에 해당 캐릭터가 있는지 확인 
+                // Check if a character is in the target block
                 if (false == this.movingBlockScripts[serverBlockIndex].HasPlayerInCarrierPool(sessionId)) {
-                    // 없다면 운반용 부모 생성 및 설정
+                    // If none, create transport parent and initialize. 
                     this.SetCarrierParentAndZepetoContext(sessionId);
 
                     let relativeVector: Vector3 = Vector3.zero;
                     let carrierParent: Transform = this.carrierParents.get(sessionId).transform;
-                    // 해당 블록의 운반 대상으로 등록
+                    // Assign the block as the destination block. 
                     this.movingBlockScripts[serverBlockIndex].AddCharacterOnBlock(sessionId, relativeVector, carrierParent);
                 }
             }
-            // OrbitingBlock인 경우
+            // In the case of an orbiting block.
             else {
                 let newIndex = this.GetBlockIndex(serverBlockIndex);
-                // 해당 블록의 운반 대상에 해당 캐릭터가 있는지 확인 
+                // Check if a character is in the target block
                 if (false == this.orbitingBlockScripts[newIndex].HasPlayerInCarrierPool(sessionId)) {
-                    // 없다면 운반용 부모 생성 및 설정
+                    // If none, create transport parent and initialize. 
                     this.SetCarrierParentAndZepetoContext(sessionId);
 
                     let relativeVector: Vector3 = Vector3.zero;
                     let carrierParent: Transform = this.carrierParents.get(sessionId).transform;
-                    // 해당 블록의 운반 대상으로 등록
+                    // Assign the block as the destination block. 
                     this.orbitingBlockScripts[newIndex].AddCharacterOnBlock(sessionId, relativeVector, carrierParent);
 
                 }
@@ -413,7 +413,7 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     /* ResetOriginParent() 
-       - 운반용 부모에서 원래의 Zepeto Character 부모로 돌려놓습니다. 
+       - Revert the carrierParent as the Zepeto Character parent.
     */
     private ResetOriginParent(sessionId: string) {
         const context = this.characterContexts.get(sessionId);
@@ -430,8 +430,8 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
         originParent.SetActive(true);
 
         /**
-         * carrierParent에서 originParent로 변경하는 순간 입력이 없다면 기존 state가 실행되어 JumpMove,Run 등의 state에서 캐릭터가 플랫폼에 랜딩한 뒤 뛰어 나가는 이슈가 있음 
-         * TODO : 강제로 state를 변경하기 위해 임의의 제스처를 실행하고 일정 시간 후 제스처를 취소하는 로직이지만 해당 로직도 0.2초 이후이 입력없으면 위 상황과 동일하여 이후 State 초기화가 가능하면 해당 코드 수정 예정
+         * If there is no input at the moment of changing from carrierParent to originParent, the base state is executed, and there is an issue where the character lands on the platform in JumpMove, Run, etc. and then jumps.
+         * TODO : In order to forcibly change the state, start a random gesture and cancel the gesture after a fixed amount of time. If there is no input for 0.2 seconds, apply the same logic as above if the gesture can be reset. 
          * */
         if (character.CurrentState == CharacterState.JumpMove || character.CurrentState == CharacterState.Run)
             this.StartCoroutine(this.CancelGestureCorutine(sessionId));
@@ -451,11 +451,11 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     public gesture: AnimationClip;
 
     /* SetCarrierParentAndZepetoContext() 
-       - 블록 간 이동을 위해 기존 캐릭터 밑에 있던 Zepeto Context를 가져와 운반용 부모에 붙여줍니다.
+       - To move between blocks, take the Zepeto Context under the current character and attach it to the carrierParent.
     */
     private SetCarrierParentAndZepetoContext(sessionId: string) {
 
-        // 운반용 부모가 없다면 생성
+        // Instantiate transport parent if it doesn't exist. 
         if (false == this.carrierParents.has(sessionId)) {
             var obj = GameObject.Instantiate<GameObject>(this.carrierParentPrefab);
             obj.GetComponent<CarrierParentController>().SetSessionId(sessionId);
@@ -463,33 +463,33 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
             this.carrierParents.set(sessionId, obj);
         }
 
-        // 중력 설정 초기화
+        //Initialize gravity usage.
         this.carrierParents.get(sessionId).GetComponent<Rigidbody>().useGravity = false;
 
-        // 있다면 운반용 부모를 가져옴 
+        // Grab the carrierParent if it exists.
         let carrierParent = this.carrierParents.get(sessionId);
         const character = ZepetoPlayers.instance.GetPlayer(sessionId).character;
 
-        // carrierParent가 엉뚱한 위치에 있는 경우가 있어 기존 캐릭터 위치로 설정 
+        // There are cases where the carrierParent is in an odd position. Reset to charact transform position.
         carrierParent.transform.position = character.transform.position;
         carrierParent.transform.rotation = character.transform.rotation;
 
-        // context 추출 후 나중에 다시 돌려놓기 위해 Map에 저장 
+        // After grabbing the context, cache it to the Map to revert it later.
         const context = character.Context.gameObject;
         this.characterContexts.set(sessionId, context);
 
-        // context에 새로운 운반용 부모를 설정 및 앵글, 포지션 초기화
+        // Set new carrierParent in context and initialize angle and position
         context.transform.SetParent(carrierParent.transform);
         context.transform.localEulerAngles = Vector3.zero;
         context.transform.localPosition = Vector3.zero;
 
-        // 원래 부모는 나중에 다시 사용하기 위해 Map에 저장
+        // Save the original parent to the map for later use. 
         this.originCharacterParents.set(sessionId, character.gameObject);
-        character.gameObject.SetActive(false); // 비활성화
+        character.gameObject.SetActive(false); // Deactivate
     }
 
     /* GetBlockIndex() 
-       - Moving Block인지 Orbiting Block인지에 따라 인덱스를 조정하여 반환합니다.
+       - Return the index depending on whether the block is moving or orbiting.
     */
     private GetBlockIndex(idx: number): number {
         if (idx < this.movingBlocks.length) {
@@ -500,13 +500,13 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     /* TeleportBlockRelativePosition() 
-       - 리모트 캐릭터를 특정 블록의 상대적 위치로 이동시키고, 해당 블록의 운반 대상으로 등록합니다.
-         운반대상에 등록된 리모트 캐릭터는 무빙블럭과 함께 움직입니다.
+        - Moves the remote character to the relative position of the target block, and registers the character as a transport target to the block.
+          The remote character registered in the transport target moves with the moving block.  
     */
     TeleportCharacterOnBlock(message: PlayerBlockInfo) {
         const sessionId: string = message.sessionId;
 
-        // 점프 관련 처리 
+        // Jump related handling
         if (this.carrierParents.has(sessionId)) {
             const animator = ZepetoPlayers.instance.GetPlayer(sessionId).character.ZepetoAnimator;
             animator.runtimeAnimatorController = this.moveBlockAnimator;
@@ -514,7 +514,7 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
             animator.SetBool("JumpMove", false);
         }
 
-        // 랜딩 상태일때 기존 점프 코루틴 정지
+        // Stop the jump coroutine if in landing state
         this.StopJumpToBlockCoroutine(sessionId);
 
         const blockIdx: number = message.blockIndex;
@@ -536,7 +536,7 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     private FIRSTBLOCK: number = 2;
 
     /* TeleportSameBlockRelativePosition() 
-       - 리모트 캐릭터를 같은 블록 내 점프 위치로 이동시키고, 해당 블록의 운반 대상에서 삭제합니다.
+        - Moves the remote character to the jump position within the same block, and deletes it from the carrier parent of the block.
     */
     OnBlockTriggerExit(message: PlayerBlockInfo) {
 
@@ -561,7 +561,7 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     /*IsMovingBlock()
-        -  블럭의 인덱스를 통해 현재 블럭이 무빙블록 인지 아닌지를 반환합니다.
+        -  Returns whether the current block is a moving block or not via block index.
     */
     private IsMovingBlock(blockIdx: number): boolean {
         if (blockIdx < this.movingBlocks.length) {
@@ -572,10 +572,10 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     /*MoveBlockToPlatform()
-        - 플레이어가 캐리어를 가지고 플랫폼에 들어는 순간에 원래의 Zepeto Character 설정으로 돌려놓습니다.
+        - Resets to the original Zepeto Character settings the moment the player enters the platform with the carrier.
     */
     public MoveBlockToPlatform(sessionId: string) {
-        // 기존 동기화 로직 실행을 위해 context를 원래 부모로 돌려놔줌
+        // Return context to its original parent to execute synchronization logic
         if (false == this.characterContexts.has(sessionId)) {
             return;
         }
@@ -594,7 +594,7 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
 
 
     /* ResetJumpToBlockSetting() 
-       - 무빙블록간 운반을 위해 지정되었던 애니메이터와 코루틴을 기존 상태로 돌려놓습니다.
+        - Animators and coroutines that were altered for transport between moving blocks are returned to their original state.
     */
     private ResetJumpToBlockSetting(sessionId: string) {
         const animator = ZepetoPlayers.instance.GetPlayer(sessionId).character.ZepetoAnimator;
@@ -608,13 +608,12 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
     }
 
     private SetJumpToBlockSetting(sessionId: string, blockIndex: number, relativeVector: Vector3, blockFlag: number, platformPosition?: Vector3) {
-
-        // blockPosition은 캐릭터가 서 있던 블럭의 position 이고 startPosition은 캐릭터가 점프하면서 나간 triggerExit 시점의 위치입니다. 
+        // blockPosition is the position of the block the character was standing on, and startPosition is the position at the triggerExit point where the character exits while jumping.
         var blockPosition: Vector3 = Vector3.zero;
         var startPosition: Vector3 = Vector3.zero;
 
-        if (blockFlag == this.FIRSTBLOCK) { // 플랫폼에서 블록으로 가는 경우
-            //플랫폼에서 나가는 경우에는 platformPosition을 보내 현재 블럭의 position이 아닌 플랫폼에서 점프한 위치를 가져오고 이미 계산한 relativeVector를 구해서 보냅니다.
+        if (blockFlag == this.FIRSTBLOCK) { // If moving from platform to block. 
+            //When leaving the platform, send platformPosition to get the jump position of the platform that is not at the position of the current block, and send the previously calculated relativeVector.
             blockPosition = platformPosition ? platformPosition : relativeVector;
             startPosition = this.carrierParents.get(sessionId).transform.position;
         }
@@ -628,27 +627,27 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
             startPosition = new Vector3(blockPosition.x - relativeVector.x, blockPosition.y - relativeVector.y, blockPosition.z - relativeVector.z);
         }
 
-        // 점프 코루틴 관련 셋팅
+        // Jump coroutine related settings. 
         this.isLanding.set(sessionId, false);
 
-        // 캐릭터의 점프 방향 구하기 - startPositon 과 blockPosition 사이 방향 벡터를 구합니다.
+        // Create a jump direction vector by subtracing the startPositon and the blockPosition 캐릭터의 점프 방향 구하기 - startPositon 과 blockPosition 사이 방향 벡터를 구합니다.
         var anglePos: Vector3 = (startPosition - blockPosition);
 
-        // 캐릭터의 점프 방향 구하기 - 플랫폼에서 블록으로 가는 경우 이미 계산된 relativeVector가 전달됩니다.
+        // Character Jump Direction - If moving from platform to moving block, use the previously calulcated relativeVector
         if (blockFlag == this.FIRSTBLOCK)
             anglePos = relativeVector;
 
         let angle = Mathf.Atan2(anglePos.y, anglePos.x) * Mathf.Rad2Deg;
         angle = anglePos.z > 0 ? angle : angle * -1;
 
-        // 캐릭터가 점프해서 나간 각도에 따라 고정된 점프 길이 값( playerJumpDistance : 3)만큼의 예상 점프 위치를 계산합니다.
+        // Based on the angle at which the character jumps and exits, the estimated jump position is calculated by a fixed jump length value ( playerJumpDistance : 3).
         let targetPosition = new Vector3(startPosition.x + (Mathf.Cos(angle * Mathf.Deg2Rad) * this.playerJumpDistance),
             blockPosition.y, startPosition.z + (Mathf.Sin(angle * Mathf.Deg2Rad) * this.playerJumpDistance));
 
-        // 점프 예측 위치는 캐릭터 마다 저장 됩니다.
+        // The predicted jump position is saved for each character. 
         this.playerTargetPosition.set(sessionId, targetPosition);
 
-        // 점프를 시작합니다.
+        // Start the jump
         let jumpCoroutine = this.StartCoroutine(this.JumpToBlock(sessionId, startPosition, 45));
         this.jumpCoroutines.set(sessionId, jumpCoroutine);
 
@@ -666,8 +665,8 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
 
     /**
      * JumpToBlock()
-     * 캐릭터 점프에 쓰이는 포물선 함수
-     * 뛰는 캐릭터와 현재 점프 시작 위치, 점프 각도를 파라미터로 가져와 SetJumpToBlockSetting에서 셋팅한 TargetPosition까지 점프를 진행합니다.
+     * Parabolic function used for jumping
+     * Takes the jumping character, the current jump start position, and the jump angle as parameters to jumps to the TargetPosition set in SetJumpToBlockSetting.
     */
     *JumpToBlock(sessionId: string, startPosition: Vector3, angle: number) {
         if (this.isLanding.get(sessionId))
@@ -675,7 +674,7 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
         if (false == this.carrierParents.has(sessionId))
             return;
 
-        //캐릭터가 점프 시 포물선으로 움직이게 하기 위해서 carrierParent의 Transform을 가져와 Translate함
+        //In order to make the character move in a parabola when jumping, we cache the transform of carrierParent and translate it.
         let characterTransform = this.carrierParents.get(sessionId).transform;
         let targetPosition = this.playerTargetPosition.get(sessionId);
         let distance = Vector3.Distance(targetPosition, startPosition);
@@ -684,7 +683,7 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
         let x = Mathf.Sqrt(velocity) * Mathf.Cos(angle * Mathf.Deg2Rad);
         let y = Mathf.Sqrt(velocity) * Mathf.Sin(angle * Mathf.Deg2Rad);
 
-        //캐릭터 점프 방향으로 캐릭터 회전값 변경
+        //Rotate the characte towards the target position.
         let rot = targetPosition - startPosition;
         characterTransform.rotation = Quaternion.LookRotation(rot);
         characterTransform.rotation = new Quaternion(0, characterTransform.rotation.y, 0, characterTransform.rotation.w);
@@ -698,7 +697,7 @@ export default class BlockMultiplay extends ZepetoScriptBehaviour {
             yield null;
         }
 
-        //블럭에서 플랫폼에 점프하는 경우에만 실행
+        //Only run if jumping onto a platform.
         if (this.isLandingPlatform.has(sessionId) && this.isLandingPlatform.get(sessionId))
             this.carrierParents.get(sessionId).GetComponent<Rigidbody>().useGravity = true;
 
